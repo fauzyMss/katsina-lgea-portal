@@ -1,0 +1,1070 @@
+// ============================================================
+// Katsina LGEA — Staff Portal
+// Complete Prisma Database Schema (Final Corrected Version)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum StaffType {
+  TEACHER
+  LEA_ADMIN
+}
+
+// ─── Role Hierarchy ──────────────────────────────────────────
+// SUPER_ADMIN           → Full system access, invite codes, reset passwords
+// EDUCATION_SECRETARY   → Full LEA access, can approve leave/promotions/transfers
+// HOD_PRS               → Head of PRS department — full PRS access
+// EMIS_UNIT_HEAD        → Head of EMIS unit — full EMIS data
+// ME_UNIT_HEAD          → Head of M&E unit — full M&E data
+// HOD_PERSONNEL         → Head of Personnel — can approve leave/transfers/promotions
+// STAFF_OFFICER         → Open & Secret Registry — view & process only, cannot approve
+// HOD_FINANCE           → Finance — all salary slips, payroll, salary complaints
+// HOD_ACADEMIC          → Academic data only
+// HOD_QA                → QA assessments only
+// HOD_MOBILIZATION      → Enrollment & out-of-school data only
+// HOD_PHYSICAL_PLANNING → School infrastructure data only
+// HOD_TEACHER_DEV       → Teacher profiles, training, TRCN, flagging
+// HOD_SPECIAL_PROGRAM   → Special needs & programme data only
+// AEO_ZONE_A to F       → One officer per zone — schools in their zone only
+// HEADTEACHER           → Own school only — auto loses access on transfer
+// TEACHER               → Own profile, own leave, own training only
+// LEA_ADMIN_STAFF       → Own profile, own leave, own complaints only
+
+enum Role {
+  SUPER_ADMIN
+  EDUCATION_SECRETARY
+  HOD_PRS
+  EMIS_UNIT_HEAD
+  ME_UNIT_HEAD
+  HOD_PERSONNEL
+  STAFF_OFFICER
+  HOD_FINANCE
+  HOD_ACADEMIC
+  HOD_QA
+  HOD_MOBILIZATION
+  HOD_PHYSICAL_PLANNING
+  HOD_TEACHER_DEV
+  HOD_SPECIAL_PROGRAM
+  AEO_ZONE_A
+  AEO_ZONE_B
+  AEO_ZONE_C
+  AEO_ZONE_D
+  AEO_ZONE_E
+  AEO_ZONE_F
+  HEADTEACHER
+  TEACHER
+  LEA_ADMIN_STAFF
+}
+
+enum Zone {
+  A
+  B
+  C
+  D
+  E
+  F
+}
+
+enum Department {
+  PERSONNEL
+  OPEN_REGISTRY
+  SECRET_REGISTRY
+  FINANCE
+  ACADEMIC
+  QUALITY_ASSURANCE
+  MOBILIZATION
+  PHYSICAL_PLANNING
+  TEACHER_DEVELOPMENT
+  SPECIAL_PROGRAM
+  EMIS
+  ME
+  PRS
+  GENERAL
+}
+
+enum LeaveType {
+  ANNUAL
+  HAJJ
+  UMRAH
+  SICK
+  MATERNITY
+  PATERNITY
+  EMERGENCY
+  IN_SERVICE
+  SECONDMENT
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+  CANCELLED
+}
+
+enum TransferStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum PromotionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ComplaintCategory {
+  WELFARE
+  SALARY
+  HARASSMENT
+  WORKLOAD
+  POSTING
+  OTHER
+}
+
+enum ComplaintStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum TeacherComplaintCategory {
+  ABSENTEEISM
+  MISCONDUCT
+  POOR_PERFORMANCE
+  INSUBORDINATION
+  OTHER
+}
+
+enum FlagReason {
+  TRAINING_NEEDED
+  PERFORMANCE_CONCERN
+  TRCN_RENEWAL
+  CLASSROOM_MANAGEMENT
+  OTHER
+}
+
+enum FlagStatus {
+  OPEN
+  RESOLVED
+}
+
+enum QAGrade {
+  A
+  B
+  C
+  D
+  F
+}
+
+enum InfrastructureStatus {
+  FUNCTIONAL
+  SEASONAL
+  NON_FUNCTIONAL
+  NOT_AVAILABLE
+}
+
+enum PowerSource {
+  NEPA_GRID
+  SOLAR
+  GENERATOR
+  NONE
+}
+
+enum WaterSource {
+  BOREHOLE
+  WELL
+  PIPE_BORNE
+  RAINWATER
+  NONE
+}
+
+enum BuildingType {
+  PERMANENT
+  SEMI_PERMANENT
+  TEMPORARY
+  OPEN_AIR
+}
+
+enum FencingStatus {
+  FULLY_FENCED
+  PARTIALLY_FENCED
+  NOT_FENCED
+}
+
+enum VisitStatus {
+  PENDING
+  COMPLETED
+  OVERDUE
+}
+
+enum Term {
+  FIRST
+  SECOND
+  THIRD
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum TRCNStatus {
+  ACTIVE
+  EXPIRED
+  NOT_REGISTERED
+}
+
+enum TeachingQualification {
+  NCE
+  PGDE
+  BED
+  MED
+  PHD
+  OTHER
+}
+
+enum NotificationType {
+  LEAVE_UPDATE
+  PROMOTION_UPDATE
+  ANNOUNCEMENT
+  COMPLAINT_UPDATE
+  TRAINING_INVITE
+  FLAG_NOTIFICATION
+  TRANSFER_UPDATE
+  DATA_REMINDER
+  QA_REPORT
+  ME_FEEDBACK
+}
+
+enum AnnouncementTarget {
+  ALL_STAFF
+  TEACHERS_ONLY
+  LEA_ADMIN_ONLY
+  SPECIFIC_SCHOOL
+  SPECIFIC_DEPARTMENT
+}
+
+// ============================================================
+// CORE: USER & AUTHENTICATION
+// ============================================================
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  passwordHash   String
+  staffType      StaffType
+  role           Role
+  zone           Zone?     // Only for AEO roles
+  isActive       Boolean   @default(true)
+  mfaEnabled     Boolean   @default(false)
+  mfaSecret      String?
+  lastLogin      DateTime?
+  sessionTimeout Int       @default(30)
+  inviteCodeUsed String?
+  emailVerified  Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  staffProfile         StaffProfile?
+  notifications        Notification[]
+  leaveApplications    LeaveApplication[]   @relation("LeaveApplicant")
+  leaveApprovals       LeaveApplication[]   @relation("LeaveApprover")
+  complaints           Complaint[]          @relation("ComplaintRaiser")
+  complaintResolutions Complaint[]          @relation("ComplaintResolver")
+  teacherComplaints    TeacherComplaint[]   @relation("FiledBy")
+  flagsGiven           TeacherFlag[]        @relation("FlaggedBy")
+  flagsReceived        TeacherFlag[]        @relation("FlaggedStaff")
+  transferRequests     TransferRequest[]    @relation("TransferRequester")
+  transferApprovals    TransferRequest[]    @relation("TransferApprover")
+  promotions           PromotionRecord[]    @relation("StaffPromotion")
+  promotionApprovals   PromotionRecord[]    @relation("PromotionApprover")
+  trainingsCreated     Training[]           @relation("TrainingCreator")
+  trainingAttendees    TrainingAttendee[]
+  meVisitLogs          MEVisitLog[]
+  qaAssessments        QAAssessment[]
+  announcements        Announcement[]
+  sessions             Session[]
+  passwordResets       PasswordReset[]
+  inviteCodesCreated   InviteCode[]         @relation("InviteCreator")
+  auditLogs            AuditLog[]
+  headteacherHistory   HeadteacherHistory[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Only SUPER_ADMIN and HOD_PERSONNEL can create invite codes
+model InviteCode {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  batchName   String?
+  roleFor     Role?
+  usedBy      String?
+  usedAt      DateTime?
+  isActive    Boolean   @default(true)
+  createdById String
+  createdBy   User      @relation("InviteCreator", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+
+  @@index([code])
+}
+
+// ============================================================
+// AUDIT LOG — tracks every important action in the system
+// ============================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  module    String
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([module])
+}
+
+// ============================================================
+// STAFF PROFILE
+// ============================================================
+
+model StaffProfile {
+  id                     String                 @id @default(cuid())
+  userId                 String                 @unique
+  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Personal Information
+  fullName               String
+  passportPhotoUrl       String?
+  dateOfBirth            DateTime
+  gender                 Gender
+  staffId                String                 @unique
+  nin                    String?                @unique
+  gradeLevel             Int
+  step                   Int
+  cadre                  String?
+  dateOfFirstAppointment DateTime
+  dateOfCurrentPosting   DateTime
+  phoneNumber            String
+  residentialAddress     String
+  stateOfOrigin          String
+  lgaOfOrigin            String
+
+  // Next of Kin
+  nextOfKinName          String?
+  nextOfKinRelationship  String?
+  nextOfKinPhone         String?
+
+  // Payroll
+  bankName               String?
+  accountNumber          String?
+
+  // Qualifications
+  highestQualification   String
+  institutionAttended    String?
+  yearOfGraduation       Int?
+  subjectsStudied        String[]
+  teachingQualification  TeachingQualification?
+  trcnNumber             String?
+  trcnStatus             TRCNStatus             @default(NOT_REGISTERED)
+  trcnExpiryDate         DateTime?
+
+  // Profile Completeness (0-100)
+  completenessScore      Int                    @default(0)
+
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  // Sub-profiles
+  teacherProfile         TeacherProfile?
+  leaAdminProfile        LEAAdminProfile?
+  documents              Document[]
+  salarySlips            SalarySlip[]
+
+  @@index([staffId])
+  @@index([userId])
+}
+
+// Teacher-specific fields
+model TeacherProfile {
+  id                 String            @id @default(cuid())
+  staffProfileId     String            @unique
+  staffProfile       StaffProfile      @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  schoolId           String
+  school             School            @relation(fields: [schoolId], references: [id])
+  yearsOfTeachingExp Int               @default(0)
+  specialistSubject  String?
+  isFormTeacher      Boolean           @default(false)
+  subjectsAssigned   TeacherSubject[]
+  classAssignments   ClassAssignment[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([schoolId])
+}
+
+model TeacherSubject {
+  id               String         @id @default(cuid())
+  teacherProfileId String
+  teacherProfile   TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+  subjectName      String
+  classLevel       String?
+
+  @@unique([teacherProfileId, subjectName, classLevel])
+}
+
+// LEA Admin-specific fields
+model LEAAdminProfile {
+  id                 String       @id @default(cuid())
+  staffProfileId     String       @unique
+  staffProfile       StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  department         Department
+  unit               String?
+  jobTitle           String
+  responsibilities   String?
+  officeLocation     String?
+  supervisingOfficer String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+}
+
+// ============================================================
+// HEADTEACHER HISTORY
+// Auto-tracks school transfers — removes old access, grants new
+// HOD Personnel is notified automatically on transfer
+// ============================================================
+
+model HeadteacherHistory {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  schoolId  String
+  school    School    @relation(fields: [schoolId], references: [id])
+  startDate DateTime
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([schoolId])
+}
+
+// ============================================================
+// SCHOOLS
+// ============================================================
+
+model School {
+  id                 String               @id @default(cuid())
+  name               String
+  code               String               @unique
+  ward               String
+  lga                String
+  address            String?
+  zone               Zone                 // Zone A to F
+  headteacherId      String?              @unique
+  isActive           Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  // Relations
+  teachers           TeacherProfile[]
+  classRecords       ClassRecord[]
+  infrastructure     SchoolInfrastructure?
+  ictInventory       ICTInventory[]
+  clubs              SchoolClub[]
+  leaveApplications  LeaveApplication[]
+  teacherComplaints  TeacherComplaint[]
+  teacherFlags       TeacherFlag[]
+  meVisits           MEVisitLog[]
+  qaAssessments      QAAssessment[]
+  dataCompleteness   DataCompleteness[]
+  transfersTo        TransferRequest[]    @relation("TransferToSchool")
+  transfersFrom      TransferRequest[]    @relation("TransferFromSchool")
+  headteacherHistory HeadteacherHistory[]
+
+  @@index([lga])
+  @@index([zone])
+  @@index([code])
+}
+
+// ============================================================
+// ENROLLMENT — per class, per term, per year
+// ============================================================
+
+model ClassRecord {
+  id               String            @id @default(cuid())
+  schoolId         String
+  school           School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  className        String
+  arm              String?
+  academicYear     String
+  term             Term
+  totalLearners    Int
+  males            Int
+  females          Int
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  classAssignments ClassAssignment[]
+
+  @@unique([schoolId, className, arm, academicYear, term])
+  @@index([schoolId, academicYear, term])
+}
+
+model ClassAssignment {
+  id               String         @id @default(cuid())
+  classRecordId    String
+  classRecord      ClassRecord    @relation(fields: [classRecordId], references: [id], onDelete: Cascade)
+  teacherProfileId String
+  teacherProfile   TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+  isFormTeacher    Boolean        @default(false)
+  academicYear     String
+  term             Term
+
+  @@unique([classRecordId, teacherProfileId, academicYear, term])
+}
+
+// ============================================================
+// SCHOOL INFRASTRUCTURE
+// ============================================================
+
+model SchoolInfrastructure {
+  id                     String               @id @default(cuid())
+  schoolId               String               @unique
+  school                 School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  waterSource            WaterSource          @default(NONE)
+  waterStatus            InfrastructureStatus @default(NON_FUNCTIONAL)
+  powerSource            PowerSource          @default(NONE)
+  powerReliability       InfrastructureStatus @default(NON_FUNCTIONAL)
+  totalClassrooms        Int                  @default(0)
+  functionalClassrooms   Int                  @default(0)
+  classroomsUnderRepair  Int                  @default(0)
+  dilapidatedClassrooms  Int                  @default(0)
+  boysToiletsTotal       Int                  @default(0)
+  boysToiletsFunctional  Int                  @default(0)
+  girlsToiletsTotal      Int                  @default(0)
+  girlsToiletsFunctional Int                  @default(0)
+  staffToiletsTotal      Int                  @default(0)
+  staffToiletsFunctional Int                  @default(0)
+  genderSeparated        Boolean              @default(false)
+  buildingType           BuildingType         @default(PERMANENT)
+  fencing                FencingStatus        @default(NOT_FENCED)
+  hasLibrary             Boolean              @default(false)
+  libraryFunctional      Boolean              @default(false)
+  hasGarden              Boolean              @default(false)
+  hasFeedingProgramme    Boolean              @default(false)
+  lastUpdatedById        String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+}
+
+model ICTInventory {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  itemName      String
+  quantity      Int      @default(0)
+  functional    Int      @default(0)
+  nonFunctional Int      @default(0)
+  notes         String?
+  hasInternet   Boolean?
+  internetType  String?
+  academicYear  String
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@unique([schoolId, itemName, academicYear])
+}
+
+// ============================================================
+// SCHOOL CLUBS
+// ============================================================
+
+model SchoolClub {
+  id                String         @id @default(cuid())
+  schoolId          String
+  school            School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name              String
+  teacherInChargeId String?
+  meetingSchedule   String?
+  memberCount       Int            @default(0)
+  activities        ClubActivity[]
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@unique([schoolId, name])
+}
+
+model ClubActivity {
+  id           String     @id @default(cuid())
+  clubId       String
+  club         SchoolClub @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  term         Term
+  academicYear String
+  description  String
+  date         DateTime
+  createdAt    DateTime   @default(now())
+}
+
+// ============================================================
+// LEAVE
+// ============================================================
+
+model LeaveApplication {
+  id                String      @id @default(cuid())
+  applicantId       String
+  applicant         User        @relation("LeaveApplicant", fields: [applicantId], references: [id])
+  schoolId          String?
+  school            School?     @relation(fields: [schoolId], references: [id])
+  leaveType         LeaveType
+  startDate         DateTime
+  endDate           DateTime
+  daysRequested     Int
+  reason            String?
+  status            LeaveStatus @default(PENDING)
+
+  // Leave-type specific fields
+  medicalCertUrl    String?
+  expectedDelivery  DateTime?
+  birthCertUrl      String?
+  programmeName     String?
+  institutionName   String?
+  inServiceSponsor  String?
+  receivingOrg      String?
+  secondmentPurpose String?
+
+  // Approval
+  approvedById      String?
+  approvedBy        User?       @relation("LeaveApprover", fields: [approvedById], references: [id])
+  approvedAt        DateTime?
+  rejectionReason   String?
+  escalatedAt       DateTime?
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([applicantId])
+  @@index([status])
+}
+
+model LeaveBalance {
+  id           String   @id @default(cuid())
+  staffId      String   @unique
+  annualUsed   Int      @default(0)
+  annualTotal  Int      @default(30)
+  sickUsed     Int      @default(0)
+  academicYear String
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+}
+
+// ============================================================
+// TRANSFERS
+// ============================================================
+
+model TransferRequest {
+  id              String         @id @default(cuid())
+  requestedById   String
+  requestedBy     User           @relation("TransferRequester", fields: [requestedById], references: [id])
+  fromSchoolId    String?
+  fromSchool      School?        @relation("TransferFromSchool", fields: [fromSchoolId], references: [id])
+  toSchoolId      String?
+  toSchool        School?        @relation("TransferToSchool", fields: [toSchoolId], references: [id])
+  toDepartment    Department?
+  reason          String
+  recommendedBy   String?
+  status          TransferStatus @default(PENDING)
+  processedById   String?
+  processedBy     User?          @relation("TransferApprover", fields: [processedById], references: [id])
+  processedAt     DateTime?
+  rejectionReason String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([requestedById])
+  @@index([status])
+}
+
+// ============================================================
+// PROMOTIONS
+// ============================================================
+
+model PromotionRecord {
+  id             String          @id @default(cuid())
+  staffId        String
+  staff          User            @relation("StaffPromotion", fields: [staffId], references: [id])
+  fromGradeLevel Int
+  fromStep       Int
+  toGradeLevel   Int
+  toStep         Int
+  effectiveDate  DateTime
+  status         PromotionStatus @default(PENDING)
+  confirmedById  String?
+  confirmedBy    User?           @relation("PromotionApprover", fields: [confirmedById], references: [id])
+  confirmedAt    DateTime?
+  notes          String?
+  createdAt      DateTime        @default(now())
+
+  @@index([staffId])
+}
+
+// ============================================================
+// COMPLAINTS — Staff self-complaints
+// ============================================================
+
+model Complaint {
+  id              String            @id @default(cuid())
+  complainantId   String
+  complainant     User              @relation("ComplaintRaiser", fields: [complainantId], references: [id])
+  category        ComplaintCategory
+  isSalaryIssue   Boolean           @default(false) // HOD Finance filter
+  description     String
+  isConfidential  Boolean           @default(false)
+  status          ComplaintStatus   @default(SUBMITTED)
+  assignedTo      Department?
+  resolutionNotes String?
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolvedBy      User?             @relation("ComplaintResolver", fields: [resolvedById], references: [id])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([complainantId])
+  @@index([status])
+}
+
+// Headteacher complaints about a teacher
+model TeacherComplaint {
+  id             String                   @id @default(cuid())
+  filedById      String
+  filedBy        User                     @relation("FiledBy", fields: [filedById], references: [id])
+  teacherId      String
+  schoolId       String
+  school         School                   @relation(fields: [schoolId], references: [id])
+  category       TeacherComplaintCategory
+  description    String
+  isConfidential Boolean                  @default(false)
+  status         ComplaintStatus          @default(SUBMITTED)
+  outcomeNotes   String?
+  resolvedAt     DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@index([teacherId])
+  @@index([schoolId])
+}
+
+// ============================================================
+// TEACHER FLAGGING
+// ============================================================
+
+model TeacherFlag {
+  id              String     @id @default(cuid())
+  flaggedStaffId  String
+  flaggedStaff    User       @relation("FlaggedStaff", fields: [flaggedStaffId], references: [id])
+  flaggedById     String
+  flaggedBy       User       @relation("FlaggedBy", fields: [flaggedById], references: [id])
+  schoolId        String
+  school          School     @relation(fields: [schoolId], references: [id])
+  reason          FlagReason
+  details         String
+  status          FlagStatus @default(OPEN)
+  resolvedAt      DateTime?
+  resolutionNotes String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([flaggedStaffId])
+  @@index([schoolId])
+}
+
+// ============================================================
+// TRAININGS & PROFESSIONAL DEVELOPMENT
+// ============================================================
+
+model Training {
+  id              String             @id @default(cuid())
+  title           String
+  description     String?
+  date            DateTime
+  endDate         DateTime?
+  venue           String
+  facilitator     String
+  maxParticipants Int?
+  targetAudience  String
+  targetSchoolIds String[]
+  targetSubjects  String[]
+  createdById     String
+  createdBy       User               @relation("TrainingCreator", fields: [createdById], references: [id])
+  isPublished     Boolean            @default(false)
+  attendees       TrainingAttendee[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([date])
+}
+
+model TrainingAttendee {
+  id             String    @id @default(cuid())
+  trainingId     String
+  training       Training  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  registeredAt   DateTime  @default(now())
+  attended       Boolean   @default(false)
+  attendedAt     DateTime?
+  certificateUrl String?
+
+  @@unique([trainingId, userId])
+}
+
+// ============================================================
+// QUALITY ASSURANCE
+// ============================================================
+
+model QAAssessment {
+  id               String   @id @default(cuid())
+  schoolId         String
+  school           School   @relation(fields: [schoolId], references: [id])
+  assessorId       String
+  assessor         User     @relation(fields: [assessorId], references: [id])
+  academicYear     String
+  term             Term
+  visitDate        DateTime
+  teachingLearning Int
+  environment      Int
+  leadership       Int
+  learnerWelfare   Int
+  community        Int
+  totalScore       Int
+  grade            QAGrade
+  findings         String?
+  recommendations  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([schoolId, academicYear, term])
+  @@index([schoolId])
+}
+
+// ============================================================
+// M&E — MONITORING & EVALUATION
+// ============================================================
+
+model MEVisitLog {
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id])
+  leadOfficerId   String
+  leadOfficer     User     @relation(fields: [leadOfficerId], references: [id])
+  visitDate       DateTime
+  teamMembers     String[]
+  findings        String
+  recommendations String
+  remarks         String?
+  academicYear    String
+  term            Term
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([schoolId])
+}
+
+model MEVisitSchedule {
+  id            String      @id @default(cuid())
+  schoolId      String
+  academicYear  String
+  term          Term
+  scheduledDate DateTime?
+  status        VisitStatus @default(PENDING)
+  assignedTo    String[]
+  completedAt   DateTime?
+  visitLogId    String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([schoolId, academicYear, term])
+}
+
+model SchoolFlag {
+  id              String     @id @default(cuid())
+  schoolId        String
+  raisedById      String
+  reason          String
+  details         String
+  status          FlagStatus @default(OPEN)
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolutionNotes String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([schoolId])
+}
+
+model SchoolFeedback {
+  id         String    @id @default(cuid())
+  schoolId   String
+  fromUserId String
+  toUserId   String
+  message    String
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([schoolId])
+  @@index([toUserId])
+}
+
+// ============================================================
+// DATA COMPLETENESS
+// ============================================================
+
+model DataCompleteness {
+  id             String    @id @default(cuid())
+  schoolId       String
+  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYear   String
+  term           Term
+  enrollmentDone Boolean   @default(false)
+  infraDone      Boolean   @default(false)
+  ictDone        Boolean   @default(false)
+  staffDone      Boolean   @default(false)
+  clubsDone      Boolean   @default(false)
+  score          Int       @default(0)
+  submittedAt    DateTime?
+  lastUpdated    DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+
+  @@unique([schoolId, academicYear, term])
+}
+
+// ============================================================
+// DOCUMENTS
+// ============================================================
+
+model Document {
+  id             String       @id @default(cuid())
+  staffProfileId String
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  name           String
+  type           String
+  fileUrl        String
+  fileSize       Int?
+  mimeType       String?
+  uploadedAt     DateTime     @default(now())
+
+  @@index([staffProfileId])
+}
+
+// ============================================================
+// SALARY SLIPS — uploaded by HOD Finance
+// HOD Finance can see ALL staff salary slips
+// ============================================================
+
+model SalarySlip {
+  id             String       @id @default(cuid())
+  staffProfileId String
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  month          Int
+  year           Int
+  fileUrl        String
+  uploadedById   String
+  uploadedAt     DateTime     @default(now())
+
+  @@unique([staffProfileId, month, year])
+  @@index([staffProfileId])
+}
+
+// ============================================================
+// ANNOUNCEMENTS
+// ============================================================
+
+model Announcement {
+  id             String             @id @default(cuid())
+  authorId       String
+  author         User               @relation(fields: [authorId], references: [id])
+  title          String
+  body           String
+  target         AnnouncementTarget
+  targetSchoolId String?
+  targetDept     Department?
+  isPinned       Boolean            @default(false)
+  isUrgent       Boolean            @default(false)
+  expiresAt      DateTime?
+  reads          AnnouncementRead[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([target])
+}
+
+model AnnouncementRead {
+  id             String       @id @default(cuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId         String
+  readAt         DateTime     @default(now())
+
+  @@unique([announcementId, userId])
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+}
