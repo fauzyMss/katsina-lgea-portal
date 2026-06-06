@@ -2,16 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import crypto from 'crypto'
 
-// Generate invite code
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { roleFor, createdById, expiresInDays, batchName } = body
+    const { roleFor, expiresInDays } = body
 
-    // Generate unique code
     const code = crypto.randomBytes(6).toString('hex').toUpperCase()
 
-    // Set expiry date
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + (expiresInDays || 7))
 
@@ -19,8 +16,7 @@ export async function POST(request: NextRequest) {
       data: {
         code,
         roleFor,
-        batchName,
-        createdById,
+        createdById: 'cmpstwmmq00007tehgx64w652',
         expiresAt,
         isActive: true,
       }
@@ -31,7 +27,6 @@ export async function POST(request: NextRequest) {
       code: inviteCode.code,
       expiresAt: inviteCode.expiresAt,
     })
-
   } catch (error) {
     console.error(error)
     return NextResponse.json(
@@ -41,18 +36,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get all invite codes
 export async function GET() {
   try {
     const codes = await prisma.inviteCode.findMany({
-      include: {
-        createdBy: {
-          include: { staffProfile: true }
-        }
-      },
       orderBy: { createdAt: 'desc' }
     })
-
     return NextResponse.json(codes)
   } catch (error) {
     return NextResponse.json(
