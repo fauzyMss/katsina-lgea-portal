@@ -1,44 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
-    const { code } = await request.json()
+    const body = await request.json()
+    const { roleFor, createdById, expiresInDays, batchName } = body
 
-    const inviteCode = await prisma.inviteCode.findUnique({
-      where: { code }
+    const code = crypto.randomBytes(6).toString('hex').toUpperCase()
+
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + (expiresInDays || 7))
+
+    const inviteCode = await prisma.inviteCode.create({
+      data: {
+        code,
+        batchName: batchName || roleFor,
+        createdBy: createdById || 'admin',
+        expiresAt,
+        isActive: true,
+      }
     })
-
-    if (!inviteCode) {
-      return NextResponse.json(
-        { error: 'Invalid invite code' },
-        { status: 400 }
-      )
-    }
-
-    if (!inviteCode.isActive) {
-      return NextResponse.json(
-        { error: 'This invite code has already been used' },
-        { status: 400 }
-      )
-    }
-
-    if (inviteCode.expiresAt && new Date() > inviteCode.expiresAt) {
-      return NextResponse.json(
-        { error: 'This invite code has expired' },
-        { status: 400 }
-      )
-    }
 
     return NextResponse.json({
-      valid: true,
-      roleFor: inviteCode.roleFor,
-      batchName: inviteCode.batchName,
+      message: 'Invite code generated successfully',
+      code: inviteCode.code,
+      expiresAt: inviteCode.expiresAt,
     })
+  } catch (error) {
+    console.error(error)
+    return NextResponse.json(
+      { error: 'Failed to generate invite code' },
+      { status: 500 }
+    )
+  }
+}
 
+export async function GET() {
+  try {
+    const codes = await prisma.inviteCode.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+    return NextResponse.json(codes)
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to validate invite code' },
+      { error: 'Failed to fetch invite codes' },
       { status: 500 }
     )
   }
